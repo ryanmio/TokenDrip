@@ -57,6 +57,8 @@ MODEL_GROUPS = {
 # Default model group for quota tracking
 DEFAULT_MODEL_GROUP = '10m_group'
 
+DEFAULT_MIN_CHUNK = 50_000  # fallback if a task doesn't specify
+
 
 class TokenDripRunner:
     """Manages task discovery, state persistence, and quota tracking."""
@@ -175,11 +177,8 @@ class TokenDripRunner:
                 print(f"[TokenDrip] Skipping {task_name}: missing run_chunk function")
                 return 0, 0
             
-            if not hasattr(task_module, 'min_chunk_tokens'):
-                print(f"[TokenDrip] Skipping {task_name}: missing min_chunk_tokens")
-                return 0, 0
-            
-            min_tokens = task_module.min_chunk_tokens
+            # Use task-specified min_chunk_tokens or default
+            min_tokens = getattr(task_module, 'min_chunk_tokens', DEFAULT_MIN_CHUNK)
             
             # Determine which model group this task prefers (look for model hint in task)
             preferred_model = getattr(task_module, 'preferred_model', None)

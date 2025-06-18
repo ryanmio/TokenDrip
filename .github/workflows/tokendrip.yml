@@ -1,7 +1,7 @@
 name: TokenDrip
 on:
-  schedule:
-    - cron: "17 * * * *"  # Run at 17 minutes past every hour
+  # schedule:
+  #   - cron: "17 * * * *"  # Run at 17 minutes past every hour
   workflow_dispatch:      # Allow manual triggering
     inputs:
       test_mode:
