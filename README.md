@@ -1,6 +1,6 @@
 # TokenDrip
 
-Schedule long-running OpenAI jobs that automatically pause when daily free-token quotas (1M/10M tokens) are hit and resume at 00 UTC. Perfect for batch processing, research, and automated content generation without manual quota management.
+Token dripping is a strategy for long OpenAI workloads: instead of blasting millions of tokens in one go, you “let the faucet trickle.” Each day you run just enough requests to stay inside the free-token bucket granted by the data-sharing incentive (1 M or 10 M tokens, depending on model group), checkpoint the partial results, and then pause. At 00 UTC the quota refills, your job wakes up, loads its last checkpoint, and continues. The cycle repeats until the task completes, giving you effectively cost-free processing for projects that would otherwise be too big for a single day’s allowance.
 
 ## Quick Start
 
@@ -9,18 +9,7 @@ Schedule long-running OpenAI jobs that automatically pause when daily free-token
 3. Push to trigger the workflow
 4. Tasks run daily at 00:00 UTC via GitHub Actions
 
-## Usage
-
-Place Python task files in `tasks/` directory. Each task must implement:
-
-```python
-min_chunk_tokens = 80_000  # Minimum tokens needed per chunk
-def init_state(): return {}  # Initial state
-def run_chunk(budget, state): return (used_tokens, new_state)
-```
-
-Tasks are automatically discovered and executed with intelligent quota management.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file. 
+MIT License - see [LICENSE](LICENSE) for details.
