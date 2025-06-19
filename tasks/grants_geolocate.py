@@ -15,7 +15,6 @@ import tiktoken
 
 # ----------------- TokenDrip contract -----------------
 DEFAULT_MODEL = "gpt-4.1-2025-04-14"  # 1-M bucket
-DEFAULT_MIN_CHUNK = 50_000             # fallback used by runner
 
 # --------------------- Files ---------------------------
 CSV_PATH      = Path("grants.csv")
@@ -83,10 +82,7 @@ def run_chunk(budget: int, state: dict):
             desc = row.get(desc_col, "")
 
             prompt = build_prompt(desc)
-            est_tok = token_len(prompt) + 200  # rough response size
-            if used_tokens_total + est_tok > budget:
-                break  # stop before exceeding budget
-
+            
             resp = client.chat.completions.create(
                 model=DEFAULT_MODEL,
                 messages=[{"role": "user", "content": prompt}],
@@ -104,7 +100,7 @@ def run_chunk(budget: int, state: dict):
 
             tokens_used = resp.usage.total_tokens
             used_tokens_total += tokens_used
-
+            
             writer.writerow({
                 "row_id": row.get(id_col, row_idx),
                 "description": desc[:100],
@@ -114,6 +110,10 @@ def run_chunk(budget: int, state: dict):
             })
 
             row_idx += 1
+            
+            # Only stop after we've actually exceeded the budget
+            if used_tokens_total >= budget:
+                break
 
     state["next_row"] = row_idx
     print(f"[grants_geolocate] Processed up to row {row_idx-1}, used {used_tokens_total} tokens")
