@@ -23,6 +23,16 @@ jobs:
         with:
           python-version: '3.11'
           
+      - name: Restore cached state/output
+        uses: actions/cache@v4
+        with:
+          path: |
+            state
+            output
+          key: tokendrip-${{ runner.os }}-${{ github.run_number }}
+          restore-keys: |
+            tokendrip-${{ runner.os }}-
+        
       - name: Install dependencies
         run: pip install -r requirements.txt
         

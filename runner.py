@@ -68,22 +68,23 @@ class TokenDripRunner:
         self.global_state_file = self.state_dir / 'global.json'
         
     def load_global_state(self):
-        """Load global quota tracking state."""
+        """Load or initialize global quota tracking state."""
         if not self.global_state_file.exists():
-            return {
-                'last_reset': None,
-                'tokens_used_1m': 0,  # Tokens used for 1M group
-                'tokens_used_10m': 0,  # Tokens used for 10M group
+            init_state = {
+                'last_reset': datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                'tokens_used_1m': 0,
+                'tokens_used_10m': 0,
             }
+            print("[TokenDrip] No existing global state found → starting fresh")
+            return init_state
         
         with open(self.global_state_file, 'r') as f:
             state = json.load(f)
-            # Migrate old format if needed
-            if 'tokens_used' in state and 'tokens_used_1m' not in state:
-                state['tokens_used_1m'] = 0
-                state['tokens_used_10m'] = state.get('tokens_used', 0)
-                state.pop('tokens_used', None)
-                state.pop('model_group', None)
+            print(
+                "[TokenDrip] Loaded global state: last_reset="
+                f"{state.get('last_reset')} | 1M used={state.get('tokens_used_1m', 0)} | "
+                f"10M used={state.get('tokens_used_10m', 0)}"
+            )
             return state
     
     def save_global_state(self, state):
@@ -135,7 +136,7 @@ class TokenDripRunner:
                 continue
             tasks.append(task_file)
         
-        print(f"[TokenDrip] Discovered {len(tasks)} tasks")
+        print(f"[TokenDrip] Discovered {len(tasks)} task(s): " + ", ".join(t.stem for t in tasks))
         return tasks
     
     def load_task_module(self, task_file):
@@ -175,42 +176,71 @@ class TokenDripRunner:
                 print(f"[TokenDrip] Skipping {task_name}: missing run_chunk function")
                 return 0, 0
             
-            # Determine which model group this task prefers (look for model hint in task)
-            preferred_model = getattr(task_module, 'preferred_model', None)
-            if preferred_model:
-                preferred_group = self.get_model_group(preferred_model)
-            else:
-                preferred_group = DEFAULT_MODEL_GROUP
-            
-            # Check quota for preferred group, fallback to other group if needed
-            remaining_preferred = self.get_remaining_quota(global_state, preferred_group)
-            other_group = '1m_group' if preferred_group == '10m_group' else '10m_group'
-            remaining_other = self.get_remaining_quota(global_state, other_group)
-            
-            budget = 0
-            using_group = None
-            
-            if remaining_preferred > 0:
-                budget = remaining_preferred
-                using_group = preferred_group
-            elif remaining_other > 0:
-                budget = remaining_other
-                using_group = other_group
-            else:
-                print(f"[TokenDrip] Skipping {task_name}: no quota remaining in any group")
+            # ---------------- MODEL SELECTION LOGIC (v2) ----------------
+            # Accept several spelling styles for backwards compatibility, but encourage
+            #    MODEL          (required) and BACKUP_MODEL (optional).
+            primary_model = (
+                getattr(task_module, 'MODEL', None) or
+                getattr(task_module, 'PRIMARY_MODEL', None) or
+                getattr(task_module, 'model', None) or
+                getattr(task_module, 'preferred_model', None)
+            )
+
+            backup_model = (
+                getattr(task_module, 'BACKUP_MODEL', None) or
+                getattr(task_module, 'backup_model', None)
+            )
+             
+            if not primary_model:
+                print(f"[TokenDrip] Skipping {task_name}: no MODEL/PRIMARY_MODEL attribute defined on task")
                 return 0, 0
-            
+
+            candidate_models = [primary_model]
+            if backup_model:
+                candidate_models.append(backup_model)
+
+            selected_model = None
+            using_group    = None
+            budget         = 0
+
+            # Iterate through primary then backup to find a model whose group still has quota
+            for mdl in candidate_models:
+                grp       = self.get_model_group(mdl)
+                remaining = self.get_remaining_quota(global_state, grp)
+                if remaining > 0:
+                    selected_model = mdl
+                    using_group    = grp
+                    budget         = remaining
+                    break
+
+            if selected_model is None:
+                print(f"[TokenDrip] Skipping {task_name}: no quota remaining for specified model(s)")
+                return 0, 0
+
+            # ---------------- END MODEL SELECTION LOGIC ----------------
+
             # Load or initialize task state
             task_state = self.load_task_state(task_name)
             if task_state is None:
+                print(f"[TokenDrip] Task {task_name} status: NEW 🎉")
                 if hasattr(task_module, 'init_state'):
                     task_state = task_module.init_state()
                 else:
                     task_state = {}
+            else:
+                print(f"[TokenDrip] Task {task_name} status: existing, continuing work")
             
-            # Run task chunk
-            print(f"[TokenDrip] Executing {task_name} with {budget:,} tokens from {using_group}")
-            used_tokens, new_state = task_module.run_chunk(budget, task_state)
+            # Run task chunk, supporting both 2-arg and 3-arg signatures for backward compatibility
+            print(f"[TokenDrip] Executing {task_name} with {budget:,} tokens from {using_group} using model {selected_model}")
+            try:
+                import inspect
+                if len(inspect.signature(task_module.run_chunk).parameters) == 3:
+                    used_tokens, new_state = task_module.run_chunk(budget, task_state, selected_model)
+                else:
+                    used_tokens, new_state = task_module.run_chunk(budget, task_state)
+            except TypeError:
+                # If signature mismatch, fall back to legacy call
+                used_tokens, new_state = task_module.run_chunk(budget, task_state)
             
             # Save updated state
             self.save_task_state(task_name, new_state)
@@ -277,6 +307,9 @@ class TokenDripRunner:
         
         print(f"[TokenDrip] Session complete. Used {total_used_1m:,} tokens (1M group), {total_used_10m:,} tokens (10M group)")
         print(f"[TokenDrip] Remaining quota - 1M group: {remaining_1m:,}, 10M group: {remaining_10m:,}")
+
+        if total_used_1m == 0 and total_used_10m == 0:
+            print("[TokenDrip] No new work needed – all tasks already complete or quotas exhausted 🙌")
 
 
 if __name__ == '__main__':

@@ -14,7 +14,9 @@ import openai
 import tiktoken
 
 # ----------------- TokenDrip contract -----------------
-DEFAULT_MODEL = "gpt-4.1-2025-04-14"  # 1-M bucket
+MODEL = "gpt-4.1-2025-04-14"            # primary model (1-M group)
+# Optional: uncomment or change if you'd like a fallback when the 1-M bucket is empty
+# BACKUP_MODEL = "gpt-4o-mini-2024-07-18"  # 10-M group fallback
 
 # --------------------- Files ---------------------------
 CSV_PATH      = Path("grants.csv")
@@ -45,8 +47,16 @@ def init_state():
     return {"next_row": 0}
 
 
-def run_chunk(budget: int, state: dict):
-    """Process rows until budget exhausted. Returns tokens used."""
+def run_chunk(budget: int, state: dict, selected_model: str | None = None):
+    """Process rows until budget exhausted. Returns (tokens_used, new_state).
+
+    The runner supplies `selected_model`, which will be either `model` or `backup_model`
+    depending on which quota bucket still has room.  If it's not provided (legacy call),
+    we default to the primary `model` constant.
+    """
+    if selected_model is None:
+        selected_model = MODEL
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY env var not set")
@@ -84,7 +94,7 @@ def run_chunk(budget: int, state: dict):
             prompt = build_prompt(desc)
             
             resp = client.chat.completions.create(
-                model=DEFAULT_MODEL,
+                model=selected_model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200,
                 temperature=0.2,
