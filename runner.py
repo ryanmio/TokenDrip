@@ -5,13 +5,10 @@ Discovers tasks in tasks/ directory and runs them with intelligent quota managem
 """
 
 import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from importlib import import_module
 from importlib.util import spec_from_file_location, module_from_spec
-import tiktoken
-import os  # <-- NEW
+import os
 
 
 # Daily token limits by model group (usage tiers 3+, tiers 1-2 have lower limits)
@@ -129,12 +126,11 @@ class TokenDripRunner:
             print("[TokenDrip] No tasks/ directory found")
             return []
         
-        tasks = []
-        for task_file in self.tasks_dir.glob('*.py'):
-            if task_file.name.startswith('__'):
-                continue
-            tasks.append(task_file)
-        
+        tasks = [
+            f for f in sorted(self.tasks_dir.glob('*.py'))
+            if not f.name.startswith('__')
+        ]
+
         print(f"[TokenDrip] Discovered {len(tasks)} tasks")
         return tasks
     
@@ -281,4 +277,4 @@ class TokenDripRunner:
 
 if __name__ == '__main__':
     runner = TokenDripRunner()
-    runner.run() 
+    runner.run()

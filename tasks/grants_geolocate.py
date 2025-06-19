@@ -117,4 +117,4 @@ def run_chunk(budget: int, state: dict):
 
     state["next_row"] = row_idx
     print(f"[grants_geolocate] Processed up to row {row_idx-1}, used {used_tokens_total} tokens")
-    return used_tokens_total, state 
+    return used_tokens_total, state
