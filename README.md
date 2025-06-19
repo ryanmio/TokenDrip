@@ -7,7 +7,7 @@ Schedule long-running OpenAI jobs that automatically pause when daily free-token
 1. Fork this repository
 2. Add your `OPENAI_API_KEY` as a repository secret
 3. Push to trigger the workflow
-4. Tasks run hourly via GitHub Actions
+4. Tasks run daily at 00:00 UTC via GitHub Actions
 
 ## Usage
 
