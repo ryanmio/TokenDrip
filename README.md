@@ -4,10 +4,10 @@ Token dripping is a strategy for long OpenAI workloads: instead of blasting mill
 
 ## Quick Start
 
-1. Fork this repository.
-2. Add your `OPENAI_API_KEY` as a repository secret.
-3. Push to trigger the workflow.
-4. The GitHub Action wakes hourly, spending available tokens until the daily bucket is empty.
+1. Fork this repository
+2. Add your `OPENAI_API_KEY` as a repository secret
+3. Push to trigger the workflow
+4. Tasks run daily at 00:00 UTC via GitHub Actions
 
 
 ## License
