@@ -14,12 +14,12 @@ import openai
 import tiktoken
 
 # ----------------- TokenDrip contract -----------------
-MODEL = "gpt-4.1-2025-04-14"            # primary model (1-M group)
+MODEL = "gpt-4o-2024-05-13"            # primary model (1-M group)
 # Optional: uncomment or change if you'd like a fallback when the 1-M bucket is empty
 # BACKUP_MODEL = "gpt-4o-mini-2024-07-18"  # 10-M group fallback
 
 # --------------------- Files ---------------------------
-CSV_PATH      = Path(os.getenv("CSV_FILE", "grants.csv"))
+CSV_PATH      = Path(os.getenv("CSV_FILE", "grants-big.csv"))
 OUTPUT_PATH   = Path("output/results_full.csv")
 ID_FIELD   = "results_row_index"  # if absent, first column
 DESC_FIELD = "raw_entry"          # if absent, second column

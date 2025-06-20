@@ -10,10 +10,6 @@ on:
         description: "Set to 1 for 1k-token test quotas"
         required: false
         default: "0"
-      csv_file:
-        description: "Name of CSV file to process (inside repo)"
-        required: false
-        default: "grants-big.csv"
 
 jobs:
   quota:
@@ -47,7 +43,6 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TOKENDRIP_TEST: ${{ github.event.inputs.test_mode || '0' }}
-          CSV_FILE: ${{ github.event.inputs.csv_file }}
           
       - name: Upload state artifacts
         uses: actions/upload-artifact@v4
