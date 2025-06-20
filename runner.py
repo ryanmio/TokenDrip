@@ -245,6 +245,12 @@ class TokenDripRunner:
             # Save updated state
             self.save_task_state(task_name, new_state)
             
+            # Emit generic completion logs so individual tasks do not need to.
+            if used_tokens == 0:
+                print(f"[TokenDrip] Task {task_name} already complete – no work needed ✅")
+            elif used_tokens < budget:
+                print(f"[TokenDrip] Task {task_name} finished its remaining work ✅")
+
             print(f"[TokenDrip] Task {task_name} used {used_tokens} tokens from {using_group}")
             
             # Return usage for the appropriate group

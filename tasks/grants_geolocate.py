@@ -126,5 +126,7 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
                 break
 
     state["next_row"] = row_idx
+    if row_idx >= n_rows:
+        print("[grants_geolocate] All rows processed ✅")
     print(f"[grants_geolocate] Processed up to row {row_idx-1}, used {used_tokens_total} tokens")
     return used_tokens_total, state 
