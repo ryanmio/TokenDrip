@@ -19,7 +19,7 @@ MODEL = "gpt-4.1-2025-04-14"            # primary model (1-M group)
 # BACKUP_MODEL = "gpt-4o-mini-2024-07-18"  # 10-M group fallback
 
 # --------------------- Files ---------------------------
-CSV_PATH      = Path("grants.csv")
+CSV_PATH      = Path(os.getenv("CSV_FILE", "grants.csv"))
 OUTPUT_PATH   = Path("output/results_full.csv")
 ID_FIELD   = "results_row_index"  # if absent, first column
 DESC_FIELD = "raw_entry"          # if absent, second column

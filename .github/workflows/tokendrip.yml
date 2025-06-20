@@ -1,4 +1,6 @@
 name: TokenDrip
+run-name: >-
+  TokenDrip ${{ github.event_name == 'schedule' && 'nightly' || 'manual' }} – run ${{ github.run_number }} attempt ${{ github.run_attempt }}
 on:
   schedule:
     - cron: "0 0 * * *"  # Run once daily at 00:00 UTC
@@ -8,6 +10,10 @@ on:
         description: "Set to 1 for 1k-token test quotas"
         required: false
         default: "0"
+      csv_file:
+        description: "Name of CSV file to process (inside repo)"
+        required: false
+        default: "grants-big.csv"
 
 jobs:
   quota:
@@ -41,6 +47,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TOKENDRIP_TEST: ${{ github.event.inputs.test_mode || '0' }}
+          CSV_FILE: ${{ github.event.inputs.csv_file }}
           
       - name: Upload state artifacts
         uses: actions/upload-artifact@v4
@@ -53,4 +60,21 @@ jobs:
         if: always()
         with:
           name: output
-          path: output 
+          path: output
+
+      - name: Summarize run
+        if: always()
+        run: |
+          ROWS=0
+          if [ -f output/results_full.csv ]; then
+            # subtract header
+            ROWS=$(($(wc -l < output/results_full.csv)-1))
+          fi
+          {
+            echo "### TokenDrip summary";
+            echo "* Rows processed (cumulative): $ROWS";
+            echo "* Output artifact: \`output\`";
+            echo "* State artifact : \`state\`";
+            echo "* Event type     : ${{ github.event_name }}";
+            echo "* Test mode      : ${{ github.event.inputs.test_mode || '0' }}";
+          } >> "$GITHUB_STEP_SUMMARY" 
