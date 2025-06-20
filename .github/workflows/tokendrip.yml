@@ -14,7 +14,7 @@ on:
 jobs:
   quota:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 360
     
     steps:
       - name: Checkout repository
@@ -38,11 +38,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
         
-      - name: Run TokenDrip
-        run: python3 runner.py
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          TOKENDRIP_TEST: ${{ github.event.inputs.test_mode || '0' }}
+      - name: Run TokenDrip (soft timeout)
+        run: |
+          # Use unbuffered output (-u) so logs stream immediately. Soft timeout 355m leaves 5 min for uploads.
+          timeout 355m python3 -u runner.py || true
+          env:
+            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+            TOKENDRIP_TEST: ${{ github.event.inputs.test_mode || '0' }}
           
       - name: Upload state artifacts
         uses: actions/upload-artifact@v4
