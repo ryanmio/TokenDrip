@@ -23,7 +23,7 @@ CSV_PATH      = Path(os.getenv("CSV_FILE", "grants-big.csv"))
 OUTPUT_PATH   = Path("output/results_full.csv")
 ID_FIELD   = "results_row_index"  # if absent, first column
 DESC_FIELD = "raw_entry"          # if absent, second column
-STATE_FIELDS  = ["row_id", "description", "lat", "lon", "tokens_used"]
+STATE_FIELDS  = ["row_id", "description", "latlon", "tokens_used"]
 
 # ------------------ Helper funcs -----------------------
 enc = tiktoken.encoding_for_model("gpt-4o-mini-2024-07-18")
@@ -37,9 +37,9 @@ def token_len(text: str) -> int:
 
 def build_prompt(desc: str) -> str:
     return (
-        "Given the following colonial Virginia land grant extract, return your best-guess "
-        "latitude and longitude in decimal degrees as `lat, lon`. If unsure leave blank.\n\n"
-        f"Grant: {desc}\n\nAnswer:" )
+        "Geolocate this colonial Virginia land grant to precise latitude and longitude coordinates.\n"
+        "Respond with ONLY the coordinates in this format: [DD]°[MM]'[SS].[SSSSS]\"N [DDD]°[MM]'[SS].[SSSSS]\"W\n\n"
+        f"Grant: {desc}\n" )
 
 # ------------------ Task API ---------------------------
 
@@ -100,13 +100,13 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
                 temperature=0.2,
             )
 
+            # Capture the model's response exactly as-is (expected DMS format)
             answer = resp.choices[0].message.content.strip()
-            lat, lon = "", ""
-            if "," in answer:
-                parts = answer.split(",")
-                if len(parts) >= 2:
-                    lat = parts[0].strip()
-                    lon = parts[1].strip()
+
+            # If the model accidentally prepends/ appends markdown fences or text, strip those
+            answer = answer.replace("\n", " ").strip()
+
+            latlon = answer
 
             tokens_used = resp.usage.total_tokens
             used_tokens_total += tokens_used
@@ -114,8 +114,7 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
             writer.writerow({
                 "row_id": row.get(id_col, row_idx),
                 "description": desc[:100],
-                "lat": lat,
-                "lon": lon,
+                "latlon": latlon,
                 "tokens_used": tokens_used,
             })
 
