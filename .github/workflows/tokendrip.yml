@@ -39,13 +39,13 @@ jobs:
         run: pip install -r requirements.txt
         
       - name: Run TokenDrip (soft timeout)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TOKENDRIP_TEST: ${{ github.event.inputs.test_mode || '0' }}
         run: |
           # Use unbuffered output (-u) so logs stream immediately. Soft timeout 355m leaves 5 min for uploads.
           timeout 355m python3 -u runner.py || true
-          env:
-            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-            TOKENDRIP_TEST: ${{ github.event.inputs.test_mode || '0' }}
-          
+        
       - name: Upload state artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -62,11 +62,12 @@ jobs:
       - name: Summarize run
         if: always()
         run: |
-          ROWS=0
-          if [ -f output/results_full.csv ]; then
-            # subtract header
-            ROWS=$(($(wc -l < output/results_full.csv)-1))
-          fi
+          ROWS=$(python - <<'PY'
+          import csv, pathlib
+          p = pathlib.Path('output/results_full.csv')
+          print(sum(1 for _ in csv.reader(p.open())) - 1 if p.exists() else 0)
+          PY
+          )
           {
             echo "### TokenDrip summary";
             echo "* Rows processed (cumulative): $ROWS";
