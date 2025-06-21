@@ -44,7 +44,8 @@ jobs:
           TOKENDRIP_TEST: ${{ github.event.inputs.test_mode || '0' }}
         run: |
           # Use unbuffered output (-u) so logs stream immediately. Soft timeout 355m leaves 5 min for uploads.
-          timeout 355m python3 -u runner.py || true
+          timeout 355m python3 -u runner.py || echo "Command failed but continuing..."
+          
         
       - name: Upload state artifacts
         uses: actions/upload-artifact@v4
