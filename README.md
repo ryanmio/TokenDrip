@@ -2,13 +2,6 @@
 
 Token dripping is a strategy for token-intensive OpenAI workloads: instead of blasting millions of tokens in one go, you "let the faucet trickle." Each day you run just enough requests to stay inside the free-token bucket granted by the data-sharing incentive (1 M or 10 M tokens, depending on model group), checkpoint the partial results, and then pause. At 00 UTC the quota refills, your job wakes up, loads its last checkpoint, and continues. The cycle repeats until the task completes, giving you effectively cost-free processing for projects that would otherwise be too big for a single day's allowance.
 
-## Quick Start
-
-1. Fork this repository
-2. Add your `OPENAI_API_KEY` as a repository secret
-3. Push to trigger the workflow
-4. Tasks run daily at 00:00 UTC via GitHub Actions
-
 ## Free 11 M Tokens/Day?  Yes!
 
 OpenAI's data-sharing incentive gives every opted-in organization **two separate buckets that refill every day at 00:00 UTC** (see the [official help-center article](https://help.openai.com/en/articles/10306912-sharing-feedback-evaluation-and-fine-tuning-data-and-api-inputs-and-outputs-with-openai)):
@@ -27,15 +20,16 @@ OpenAI's data-sharing incentive gives every opted-in organization **two separate
 
 Even at the conservative end of that range the free credits are huge—enough to process a full book with GPT-4o or run tens of thousands of classification calls on `o4-mini` every single day.
 
-### Why Token Dripping matters
+*"Typical cost if you paid for it"* uses current public pricing; always check the pricing page for the latest numbers.
 
-Your job just has to stay *inside* those limits at any moment.  By checkpointing and continuing the next day, `TokenDrip` lets long-running projects consume **hundreds of millions of tokens over weeks** while your credit-card bill stays at $0.
+## Quick Start
 
-> Pro-tip: The buckets reset on a rolling 24-hour window per UTC day, so you can schedule heavy runs right after UTC midnight to maximize overlap with the next refill.
+1. Fork this repository
+2. Add your `OPENAI_API_KEY` as a repository secret
+3. Push to trigger the workflow
+4. Tasks run daily at 00:00 UTC via GitHub Actions
 
 ---
-
-*"Typical cost if you paid for it"* uses current public pricing; always check the pricing page for the latest numbers.
 
 ## License
 
