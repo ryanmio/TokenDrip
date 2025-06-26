@@ -1,6 +1,0 @@
-- [ ] Implement basic queue data structure to store task metadata and state paths.
-- [ ] Update runner to pull the next task from the queue at 00 UTC and resume it from its checkpoint.
-- [ ] Schedule the queue runner to start at 00 UTC each day.
-- [ ] After each chunk, update the queue entry with the new state and tokens used.
-- [ ] If daily quota is exhausted, persist the queue and exit until the following day.
-- [ ] Allow multiple tasks in the queue so they can progress one after another across days.
