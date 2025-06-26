@@ -47,3 +47,5 @@ output/
 # OS
 .DS_Store
 Thumbs.db 
+results_full 3.csv
+results_full_v2.csv
