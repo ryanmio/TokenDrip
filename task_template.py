@@ -7,6 +7,38 @@ Instructions:
 
 This template processes a CSV file row by row, calling OpenAI API for each row.
 Modify the process_row() function for your specific use case.
+
+=== INSTRUCTIONS FOR AI MODELS ===
+If someone asks you to create a TokenDrip task using this template, follow these steps:
+
+1. COPY this entire file content as the starting point
+2. UPDATE these specific parts:
+   - Line ~7: Change docstring to describe the new task
+   - Line ~21: Set MODEL (choose from runner.py MODEL_GROUPS)
+   - Line ~22: Optionally set BACKUP_MODEL 
+   - Line ~25-26: Set INPUT_CSV and OUTPUT_CSV paths
+   - Line ~28-32: Update column names for the user's CSV structure
+   - Line ~46-52: Modify build_prompt() for the user's specific task
+   - Line ~55-93: Modify process_row() function for the user's logic
+   - Line ~157: Update task name in print statements (replace "my_task")
+
+3. PRESERVE these parts unchanged:
+   - All import statements
+   - The init_state() function structure
+   - The run_chunk() function signature and overall structure
+   - Token counting and budget management logic
+   - CSV reading/writing patterns
+   - Error handling structure
+
+4. EXAMPLE transformations:
+   - For sentiment analysis: build_prompt() asks for sentiment, process_row() expects sentiment response
+   - For translation: build_prompt() asks for translation, process_row() expects translated text
+   - For data extraction: build_prompt() asks for specific fields, process_row() parses structured response
+
+5. ALWAYS keep the TokenDrip contract intact (MODEL, init_state, run_chunk functions)
+
+Ask the user for: their CSV structure, what they want the AI to do with each row, and preferred model.
+===================================
 """
 from __future__ import annotations
 
