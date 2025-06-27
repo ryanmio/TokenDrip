@@ -49,6 +49,7 @@ CATEGORY = "cs.AI"                   # primary arXiv category filter (None to di
 LOOKBACK_DAYS = 90                   # recent window
 TOP_N_TOTAL = 3000                   # cap total papers queued
 PAGE_SIZE = 200                      # arXiv page size when fetching list
+MIN_START_BUDGET = 1_000  # you can raise/lower as needed
 
 OUTPUT_CSV = Path("output/arxiv_drip_summaries.csv")
 OUTPUT_COLUMNS = [
@@ -59,6 +60,7 @@ OUTPUT_COLUMNS = [
     "summary_250",
     "follow_ups",
     "reproducibility",
+    "novelty",
     "reproduce_how",
     "tokens_used",
 ]
@@ -146,7 +148,8 @@ def _build_prompt(paper: Dict) -> str:
         Based on the information provided, output a JSON dictionary with exactly these keys:
           summary – ≤250 characters describing the main contribution/results.
           follow_up_experiments – array of bullet strings listing any follow-up experiments or future work the authors suggest. Return empty array if none.
-          reproducibility – integer 1-5 rating how easy it would be to reproduce the main experiment (5 easiest).
+          reproducibility – integer 1-5 rating how easy it would be to reproduce the main experiment (5 = very easy, 1 = very hard).
+          novelty – integer 1-5 rating how novel or groundbreaking the paper is (5 = very novel).
           reproduce_how – short (≤200 char) suggestion describing what reproducing this work would entail (e.g., required dataset, hardware, code repo).
         Only output JSON – no commentary.
 
@@ -181,6 +184,7 @@ def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
             "summary_250": parsed.get("summary", content),
             "follow_ups": parsed.get("follow_up_experiments", []),
             "reproducibility": parsed.get("reproducibility", ""),
+            "novelty": parsed.get("novelty", ""),
             "reproduce_how": parsed.get("reproduce_how", ""),
             "tokens_used": tokens_used,
         }
@@ -189,6 +193,7 @@ def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
             "summary_250": f"ERROR – {exc}",
             "follow_ups": [],
             "reproducibility": "",
+            "novelty": "",
             "reproduce_how": "",
             "tokens_used": 0,
         }
@@ -205,6 +210,13 @@ def init_state():
 def run_chunk(budget: int, state: dict, selected_model: str | None = None):
     if selected_model is None:
         selected_model = MODEL
+
+    # Skip if budget below threshold
+    if budget < MIN_START_BUDGET:
+        print(
+            f"[arxiv_drip] Remaining budget {budget} < MIN_START_BUDGET {MIN_START_BUDGET} – skipping until next day"
+        )
+        return 0, state
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -247,6 +259,7 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
                 "summary_250": result["summary_250"],
                 "follow_ups": " | ".join(result["follow_ups"]) if isinstance(result["follow_ups"], list) else result["follow_ups"],
                 "reproducibility": result["reproducibility"],
+                "novelty": result["novelty"],
                 "reproduce_how": result["reproduce_how"],
                 "tokens_used": result["tokens_used"],
             }
