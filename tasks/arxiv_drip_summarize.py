@@ -42,6 +42,9 @@ import io
 import time
 import pypdf
 
+# ======== State version (bump to auto-reset) ========
+STATE_VERSION = 2
+
 # ================== TokenDrip Contract (Required) ==================
 MODEL = "gpt-4o-mini-2024-07-18"   # 10M-token bucket (cheaper, larger quota)
 BACKUP_MODEL = "gpt-4o-2024-05-13" # 1M-token bucket fallback
@@ -67,9 +70,6 @@ OUTPUT_COLUMNS = [
     "reproduce_how",
     "tokens_used",
 ]
-
-# Bump this if the task logic/state schema changes so it resets automatically.
-STATE_VERSION = 2
 
 # ==================== Helper functions ==============================
 _enc = tiktoken.encoding_for_model("gpt-4o-mini-2024-07-18")
