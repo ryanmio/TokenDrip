@@ -174,7 +174,14 @@ def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
         # Polite delay for arXiv (avoid >30 req/min)
         time.sleep(2)
         reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
-        full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        texts = []
+        for pg in reader.pages:
+            try:
+                texts.append(pg.extract_text() or "")
+            except Exception:
+                # Skip pages that cause parsing errors (some PDFs have malformed tokens)
+                continue
+        full_text = "\n".join(texts)
     except Exception as exc:
         return {
             "summary_250": f"ERROR downloading PDF – {exc}",
