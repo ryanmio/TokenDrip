@@ -68,6 +68,9 @@ OUTPUT_COLUMNS = [
     "tokens_used",
 ]
 
+# Bump this if the task logic/state schema changes so it resets automatically.
+STATE_VERSION = 2
+
 # ==================== Helper functions ==============================
 _enc = tiktoken.encoding_for_model("gpt-4o-mini-2024-07-18")
 
