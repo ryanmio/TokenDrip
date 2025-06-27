@@ -76,7 +76,7 @@ _enc = tiktoken.encoding_for_model("gpt-4o-mini-2024-07-18")
 
 def _count_tokens(text: str) -> int:
     try:
-        return len(_enc.encode(text))
+        return len(_enc.encode(text, disallowed_special=()))
     except Exception:
         return len(text) // 4
 
@@ -173,7 +173,7 @@ def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
         pdf_bytes = requests.get(pdf_url, timeout=30).content
         # Polite delay for arXiv (avoid >30 req/min)
         time.sleep(2)
-        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes), strict=False)
         texts = []
         for pg in reader.pages:
             try:
@@ -195,7 +195,7 @@ def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
     # Truncate to fit 128k context window (leave headroom for prompt / response)
     MAX_INPUT_TOKENS = 110_000
     enc = tiktoken.encoding_for_model(model)
-    tok_ids = enc.encode(full_text)
+    tok_ids = enc.encode(full_text, disallowed_special=())
     if len(tok_ids) > MAX_INPUT_TOKENS:
         tok_ids = tok_ids[:MAX_INPUT_TOKENS]
         full_text = enc.decode(tok_ids)
