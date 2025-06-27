@@ -38,6 +38,9 @@ from typing import List, Dict
 import openai
 import requests
 import tiktoken
+import io
+import time
+import pypdf
 
 # ================== TokenDrip Contract (Required) ==================
 MODEL = "gpt-4o-mini-2024-07-18"   # 10M-token bucket (cheaper, larger quota)
@@ -161,33 +164,52 @@ def _build_prompt(paper: Dict) -> str:
 # =============== Processing single paper ============================
 
 def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
-    prompt = _build_prompt(paper)
+    # ---------- Download and extract full PDF text ----------
+    pdf_url = f"https://arxiv.org/pdf/{paper['arxiv_id']}.pdf"
+    try:
+        pdf_bytes = requests.get(pdf_url, timeout=30).content
+        # Polite delay for arXiv (avoid >30 req/min)
+        time.sleep(2)
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception as exc:
+        return {
+            "summary_250": f"ERROR downloading PDF – {exc}",
+            "follow_ups": [],
+            "reproducibility": "",
+            "novelty": "",
+            "reproduce_how": "",
+            "tokens_used": 0,
+        }
+
+    # Truncate to fit 128k context window (leave headroom for prompt / response)
+    MAX_INPUT_TOKENS = 110_000
+    enc = tiktoken.encoding_for_model(model)
+    tok_ids = enc.encode(full_text)
+    if len(tok_ids) > MAX_INPUT_TOKENS:
+        tok_ids = tok_ids[:MAX_INPUT_TOKENS]
+        full_text = enc.decode(tok_ids)
+
+    # ---------- Single-call summarization ----------
+    prompt_body = _truncate(full_text, 200_000)  # safety cap in chars
+    prompt = (
+        "You are an expert scientific reviewer. Given the full text of an academic paper below, "
+        "output a JSON object with exactly these keys:\n"
+        "  summary – ≤250 characters overall summary\n"
+        "  follow_up_experiments – bullet array of author-suggested future work (empty if none)\n"
+        "  reproducibility – 1-5 how easy to reproduce (5 easiest)\n"
+        "  novelty – 1-5 how novel/breakthrough (5 very novel)\n"
+        "  reproduce_how – ≤200 characters describing what reproducing would entail\n\n"
+        "Paper:\n" + prompt_body + "\n\nJSON:"
+    )
+
     try:
         res = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=600,
+            max_tokens=800,
             temperature=0.2,
         )
-        content = res.choices[0].message.content.strip()
-        tokens_used = res.usage.total_tokens
-        # Attempt to parse JSON
-        json_start = content.find("{")
-        json_end = content.rfind("}")
-        parsed = {}
-        if json_start != -1 and json_end != -1:
-            try:
-                parsed = json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-        return {
-            "summary_250": parsed.get("summary", content),
-            "follow_ups": parsed.get("follow_up_experiments", []),
-            "reproducibility": parsed.get("reproducibility", ""),
-            "novelty": parsed.get("novelty", ""),
-            "reproduce_how": parsed.get("reproduce_how", ""),
-            "tokens_used": tokens_used,
-        }
     except Exception as exc:
         return {
             "summary_250": f"ERROR – {exc}",
@@ -197,6 +219,28 @@ def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
             "reproduce_how": "",
             "tokens_used": 0,
         }
+
+    content = res.choices[0].message.content.strip()
+    total_tokens = res.usage.total_tokens
+
+    # ---------- Parse JSON ----------
+    json_start = content.find("{")
+    json_end = content.rfind("}")
+    parsed = {}
+    if json_start != -1 and json_end != -1:
+        try:
+            parsed = json.loads(content[json_start:json_end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        "summary_250": parsed.get("summary", content),
+        "follow_ups": parsed.get("follow_up_experiments", []),
+        "reproducibility": parsed.get("reproducibility", ""),
+        "novelty": parsed.get("novelty", ""),
+        "reproduce_how": parsed.get("reproduce_how", ""),
+        "tokens_used": total_tokens,
+    }
 
 # ==================== TokenDrip interface ===========================
 

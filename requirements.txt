@@ -2,3 +2,4 @@ openai>=1.14
 tiktoken
 python-dateutil 
 requests>=2.31  # Added for arXiv API HTTP requests 
+pypdf>=3.8 
