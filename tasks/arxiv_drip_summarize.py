@@ -246,10 +246,10 @@ def _process_paper(paper: Dict, client: openai.OpenAI, model: str):
 
 def init_state():
     return {
+        "version": STATE_VERSION,
         "index": 0,        # next paper to process
         "papers": [],      # cached metadata list
     }
-
 
 def run_chunk(budget: int, state: dict, selected_model: str | None = None):
     if selected_model is None:
@@ -266,6 +266,10 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY environment variable not set")
     client = openai.OpenAI(api_key=api_key)
+
+    # Auto-reset if state version is old
+    if state.get("version") != STATE_VERSION:
+        state = init_state()
 
     # Discover papers on first run
     if not state.get("papers"):

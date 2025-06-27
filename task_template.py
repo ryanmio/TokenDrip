@@ -57,6 +57,14 @@ MODEL = "gpt-4o-mini-2024-07-18"        # Primary model (10M bucket - cheaper)
 INPUT_CSV = Path(os.getenv("INPUT_CSV", "input.csv"))     # Input CSV file
 OUTPUT_CSV = Path("output/my_task_results.csv")           # Output CSV file
 
+# Optional: Skip work when the runner passes fewer tokens than this value.
+# Useful to reserve a small buffer so another task (or the next day) starts
+# cleanly. Set to None to disable.
+MIN_START_BUDGET = 1_000  # tokens
+
+# To force a fresh start when you change task logic, bump this.
+STATE_VERSION = 1
+
 # CSV column names (adjust for your data)
 ID_COLUMN = "id"           # Unique identifier column
 TEXT_COLUMN = "text"       # Text to process column
@@ -131,7 +139,7 @@ def process_row(row: dict, client: openai.OpenAI, selected_model: str) -> dict:
 
 def init_state():
     """Initialize state for a new task."""
-    return {"next_row": 0, "total_processed": 0}
+    return {"version": STATE_VERSION, "next_row": 0, "total_processed": 0}
 
 
 def run_chunk(budget: int, state: dict, selected_model: str | None = None):
@@ -147,6 +155,13 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
     """
     if selected_model is None:
         selected_model = MODEL
+    
+    # Respect optional minimum-start budget
+    if MIN_START_BUDGET and budget < MIN_START_BUDGET:
+        print(
+            f"[my_task] Budget {budget} < MIN_START_BUDGET {MIN_START_BUDGET} – waiting for next day"
+        )
+        return 0, state
     
     # Get OpenAI API key
     api_key = os.getenv("OPENAI_API_KEY")

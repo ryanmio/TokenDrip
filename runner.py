@@ -174,7 +174,7 @@ class TokenDripRunner:
             # Check required attributes
             if not hasattr(task_module, 'run_chunk'):
                 print(f"[TokenDrip] Skipping {task_name}: missing run_chunk function")
-                return 0, 0
+                return 0, 0, 0
             
             # ---------------- MODEL SELECTION LOGIC (v2) ----------------
             # Accept several spelling styles for backwards compatibility, but encourage
@@ -193,7 +193,7 @@ class TokenDripRunner:
              
             if not primary_model:
                 print(f"[TokenDrip] Skipping {task_name}: no MODEL/PRIMARY_MODEL attribute defined on task")
-                return 0, 0
+                return 0, 0, 0
 
             candidate_models = [primary_model]
             if backup_model:
@@ -215,12 +215,13 @@ class TokenDripRunner:
 
             if selected_model is None:
                 print(f"[TokenDrip] Skipping {task_name}: no quota remaining for specified model(s)")
-                return 0, 0
+                return 0, 0, 0
 
             # ---------------- END MODEL SELECTION LOGIC ----------------
 
             # Load or initialize task state
             task_state = self.load_task_state(task_name)
+            prev_total_processed = 0
             if task_state is None:
                 print(f"[TokenDrip] Task {task_name} status: NEW 🎉")
                 if hasattr(task_module, 'init_state'):
@@ -229,6 +230,7 @@ class TokenDripRunner:
                     task_state = {}
             else:
                 print(f"[TokenDrip] Task {task_name} status: existing, continuing work")
+                prev_total_processed = task_state.get('total_processed', 0)
             
             # Run task chunk, supporting both 2-arg and 3-arg signatures for backward compatibility
             print(f"[TokenDrip] Executing {task_name} with {budget:,} tokens from {using_group} using model {selected_model}")
@@ -245,6 +247,10 @@ class TokenDripRunner:
             # Save updated state
             self.save_task_state(task_name, new_state)
             
+            # Calculate number of rows processed this session (if task tracks total_processed)
+            new_total_processed = new_state.get('total_processed', prev_total_processed)
+            session_rows = max(0, new_total_processed - prev_total_processed)
+            
             # Emit generic completion logs so individual tasks do not need to.
             if used_tokens == 0:
                 print(f"[TokenDrip] Task {task_name} already complete – no work needed ✅")
@@ -255,13 +261,13 @@ class TokenDripRunner:
             
             # Return usage for the appropriate group
             if using_group == '1m_group':
-                return used_tokens, 0
+                return used_tokens, 0, session_rows
             else:
-                return 0, used_tokens
+                return 0, used_tokens, session_rows
             
         except Exception as e:
             print(f"[TokenDrip] Error running task {task_name}: {e}")
-            return 0, 0
+            return 0, 0, 0
     
     def run(self):
         """Main execution loop."""
@@ -289,6 +295,7 @@ class TokenDripRunner:
         
         total_used_1m = 0
         total_used_10m = 0
+        total_rows_session = 0
         
         for task_file in tasks:
             # Check if we still have quota in either group
@@ -299,9 +306,10 @@ class TokenDripRunner:
                 print("[TokenDrip] All quotas exhausted, stopping")
                 break
             
-            used_1m, used_10m = self.run_task(task_file, global_state)
+            used_1m, used_10m, rows_session = self.run_task(task_file, global_state)
             total_used_1m += used_1m
             total_used_10m += used_10m
+            total_rows_session += rows_session
             
             # Update global state after each task
             global_state['tokens_used_1m'] += used_1m
@@ -312,10 +320,23 @@ class TokenDripRunner:
         remaining_10m = self.get_remaining_quota(global_state, '10m_group')
         
         print(f"[TokenDrip] Session complete. Used {total_used_1m:,} tokens (1M group), {total_used_10m:,} tokens (10M group)")
+        print(f"[TokenDrip] Rows processed this session: {total_rows_session:,}")
         print(f"[TokenDrip] Remaining quota - 1M group: {remaining_1m:,}, 10M group: {remaining_10m:,}")
 
         if total_used_1m == 0 and total_used_10m == 0:
             print("[TokenDrip] No new work needed – all tasks already complete or quotas exhausted 🙌")
+
+        # Write GitHub Summary if running in Actions
+        summary_path = os.getenv('GITHUB_STEP_SUMMARY')
+        if summary_path:
+            with open(summary_path, 'a') as sf:
+                sf.write("## TokenDrip Session Summary\n")
+                sf.write(f"* Rows processed: **{total_rows_session:,}**\n")
+                sf.write(f"* Tokens used – 1M bucket: **{total_used_1m:,}**\n")
+                sf.write(f"* Tokens used – 10M bucket: **{total_used_10m:,}**\n")
+                sf.write(f"* Remaining – 1M bucket: **{remaining_1m:,}**\n")
+                sf.write(f"* Remaining – 10M bucket: **{remaining_10m:,}**\n")
+                sf.write('\n')
 
 
 if __name__ == '__main__':
