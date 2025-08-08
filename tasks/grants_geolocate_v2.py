@@ -1,8 +1,10 @@
 """Geolocate Virginia grant descriptions with OpenAI - Version 2 with DMS coordinates.
 
-This task reads `grants.csv` (requires columns: id,text) and, chunk-by-chunk,
-asks GPT to return coordinates in DMS format. Results accumulate in
-`output/results_full_v2.csv`.
+Reads a CSV of grants (expects a description column `raw_entry`) and, chunk-by-chunk,
+asks the model to return coordinates in DMS format.
+
+Input file is taken from env var `CSV_FILE` (defaults to `books6-8.csv`).
+Output is written under `output/` as `results_<input-stem>_v2.csv` (or override via `OUTPUT_FILE`).
 """
 from __future__ import annotations
 
@@ -19,11 +21,12 @@ MODEL = "gpt-4o-2024-05-13"            # primary model (1-M group)
 # BACKUP_MODEL = "gpt-4o-mini-2024-07-18"  # 10-M group fallback
 
 # --------------------- Files ---------------------------
-CSV_PATH      = Path(os.getenv("CSV_FILE", "grants-big.csv"))
-OUTPUT_PATH   = Path("output/results_full_v2.csv")
-ID_FIELD   = "results_row_index"  # if absent, first column
-DESC_FIELD = "raw_entry"          # if absent, second column
-STATE_FIELDS  = ["row_id", "description", "latlon", "tokens_used"]
+CSV_PATH = Path(os.getenv("CSV_FILE", "books6-8.csv"))
+# Allow overriding output file name via env. By default, include input stem for CI organization
+OUTPUT_PATH = Path(os.getenv("OUTPUT_FILE", f"output/results_{CSV_PATH.stem}_v2.csv"))
+ID_FIELD = "results_row_index"  # if absent, first column
+DESC_FIELD = "raw_entry"        # if absent, second column
+STATE_FIELDS = ["row_id", "description", "latlon", "tokens_used"]
 
 # ------------------ Helper funcs -----------------------
 enc = tiktoken.encoding_for_model("gpt-4o-mini-2024-07-18")

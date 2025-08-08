@@ -65,7 +65,7 @@ jobs:
         run: |
           ROWS=$(python - <<'PY'
           import csv, pathlib
-          p = pathlib.Path('output/results_full.csv')
+          p = pathlib.Path('output/results_books6-8_v2.csv')
           print(sum(1 for _ in csv.reader(p.open())) - 1 if p.exists() else 0)
           PY
           )
@@ -76,4 +76,4 @@ jobs:
             echo "* State artifact : \`state\`";
             echo "* Event type     : ${{ github.event_name }}";
             echo "* Test mode      : ${{ github.event.inputs.test_mode || '0' }}";
-          } >> "$GITHUB_STEP_SUMMARY" 
+          } >> "$GITHUB_STEP_SUMMARY"
