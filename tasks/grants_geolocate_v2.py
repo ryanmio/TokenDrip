@@ -16,7 +16,7 @@ import openai
 import tiktoken
 
 # ----------------- TokenDrip contract -----------------
-MODEL = "gpt-4o-2024-05-13"            # primary model (1-M group)
+MODEL = "gpt-5-2025-08-07"            # primary model (1-M group)
 # Optional: uncomment or change if you'd like a fallback when the 1-M bucket is empty
 # BACKUP_MODEL = "gpt-4o-mini-2024-07-18"  # 10-M group fallback
 
@@ -29,7 +29,7 @@ DESC_FIELD = "raw_entry"        # if absent, second column
 STATE_FIELDS = ["row_id", "description", "latlon", "tokens_used"]
 
 # ------------------ Helper funcs -----------------------
-enc = tiktoken.encoding_for_model("gpt-4o-mini-2024-07-18")
+enc = tiktoken.encoding_for_model("gpt-5-2025-08-07")
 
 def token_len(text: str) -> int:
     try:
