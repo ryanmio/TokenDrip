@@ -11,6 +11,8 @@ from __future__ import annotations
 import csv
 import os
 from pathlib import Path
+import asyncio
+import time
 
 import openai
 import tiktoken
@@ -26,6 +28,7 @@ ID_FIELD = "grant_id"  # if absent, first column
 DESC_FIELD = "raw_entry"        # if absent, second column
 STATE_FIELDS = ["row_id", "description", "latlon", "tokens_used"]
 ROW_LIMIT = int(os.getenv("ROW_LIMIT", "5"))  # Temporary cap for test runs
+CONCURRENCY = int(os.getenv("CONCURRENCY", "5"))
 
 # ------------------ Helper funcs -----------------------
 enc = tiktoken.encoding_for_model("gpt-5-2025-08-07")
@@ -90,56 +93,101 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
         id_col = ID_FIELD if ID_FIELD in reader.fieldnames else reader.fieldnames[0]
         desc_col = DESC_FIELD if DESC_FIELD in reader.fieldnames else reader.fieldnames[1]
 
-        current_index = -1
-        processed_count = 0
-        for row in reader:
-            current_index += 1
-            if current_index < row_idx:
-                continue
+        # Load rows into memory to enable concurrent scheduling
+        rows = list(reader)
+        total_rows = len(rows)
+        if row_idx >= total_rows:
+            print("[grants_geolocate_v3] All rows processed ✅")
+            return 0, state
 
-            desc = row.get(desc_col, "")
-            prompt = build_prompt(desc)
-            
-            # Progress heartbeat so logs move even if API is slow
-            import time
-            start_ts = time.time()
-            print(f"[grants_geolocate_v3] Requesting row {current_index}…")
-
+        async def request_row(async_client, idx: int):
+            desc_local = rows[idx].get(desc_col, "")
+            prompt_local = build_prompt(desc_local)
+            start_local = time.time()
+            print(f"[grants_geolocate_v3] Requesting row {idx}…")
             try:
-                resp = client.chat.completions.create(
+                resp = await async_client.chat.completions.create(
                     model=selected_model,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": prompt_local}],
                     timeout=180,
                 )
-
-                answer = resp.choices[0].message.content.strip()
-                answer = answer.replace("\n", " ").strip()
-                latlon = answer
-
-                tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
-                used_tokens_total += tokens_used
+                answer = resp.choices[0].message.content.strip().replace("\n", " ").strip()
+                tokens = getattr(resp, 'usage', None)
+                tokens_used_local = getattr(tokens, 'total_tokens', 0) if tokens else 0
+                latlon_local = answer
             except Exception as e:
-                latlon = f"ERROR: {e}"
-                tokens_used = 0
+                latlon_local = f"ERROR: {e}"
+                tokens_used_local = 0
+            dur_local = time.time() - start_local
+            print(f"[grants_geolocate_v3] Row {idx} finished in {dur_local:.1f}s, tokens {tokens_used_local}")
+            return {
+                "index": idx,
+                "row_id": rows[idx].get(id_col, idx),
+                "description": rows[idx].get(desc_col, "")[:100],
+                "latlon": latlon_local,
+                "tokens_used": tokens_used_local,
+            }
 
-            writer.writerow({
-                "row_id": row.get(id_col, current_index),
-                "description": desc[:100],
-                "latlon": latlon,
-                "tokens_used": tokens_used,
-            })
+        async def run_concurrent(start_i: int):
+            nonlocal used_tokens_total, row_idx
+            async_client = openai.AsyncOpenAI(api_key=api_key)
+            semaphore = asyncio.Semaphore(CONCURRENCY)
+            in_flight = set()
+            buffered = {}
+            next_to_schedule = start_i
+            next_to_write = start_i
+            written = 0
 
-            dur = time.time() - start_ts
-            print(f"[grants_geolocate_v3] Row {current_index} done in {dur:.1f}s, tokens {tokens_used}")
+            async def bound_request(i: int):
+                async with semaphore:
+                    return await request_row(async_client, i)
 
-            row_idx = current_index + 1
+            while True:
+                # Schedule up to concurrency respecting limits
+                while (
+                    next_to_schedule < total_rows
+                    and (not ROW_LIMIT or written + len(in_flight) < ROW_LIMIT)
+                    and len(in_flight) < CONCURRENCY
+                    and used_tokens_total < budget
+                ):
+                    task = asyncio.create_task(bound_request(next_to_schedule))
+                    in_flight.add(task)
+                    next_to_schedule += 1
 
-            if used_tokens_total >= budget:
-                break
-            processed_count += 1
-            if ROW_LIMIT and processed_count >= ROW_LIMIT:
-                print(f"[grants_geolocate_v3] Test cap reached ({ROW_LIMIT} rows). Stopping early.")
-                break
+                if not in_flight:
+                    break
+
+                done, pending = asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
+                in_flight = pending
+                for t in done:
+                    try:
+                        res = await t
+                        buffered[res["index"]] = res
+                    except Exception:
+                        # Skip failed task; continue
+                        pass
+
+                # Flush results in order
+                while next_to_write in buffered:
+                    res = buffered.pop(next_to_write)
+                    writer.writerow({
+                        "row_id": res["row_id"],
+                        "description": res["description"],
+                        "latlon": res["latlon"],
+                        "tokens_used": res["tokens_used"],
+                    })
+                    used_tokens_total += res.get("tokens_used", 0)
+                    written += 1
+                    row_idx = next_to_write + 1
+                    next_to_write += 1
+
+                    if used_tokens_total >= budget or (ROW_LIMIT and written >= ROW_LIMIT):
+                        # Cancel remaining in-flight tasks
+                        for p in in_flight:
+                            p.cancel()
+                        return
+
+        asyncio.run(run_concurrent(row_idx))
 
     state["next_row"] = row_idx
     print(f"[grants_geolocate_v3] Processed up to row {row_idx-1}, used {used_tokens_total} tokens")
