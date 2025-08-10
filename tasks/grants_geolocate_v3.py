@@ -157,11 +157,11 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
                 if not in_flight:
                     break
 
-                done, pending = asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
+                done, pending = await asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
                 in_flight = pending
                 for t in done:
                     try:
-                        res = await t
+                        res = t.result()
                         buffered[res["index"]] = res
                     except Exception:
                         # Skip failed task; continue
