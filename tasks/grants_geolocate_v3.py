@@ -17,8 +17,6 @@ import tiktoken
 
 # ----------------- TokenDrip contract -----------------
 MODEL = "gpt-5-2025-08-07"            # primary model (1-M group)
-# Fast fallback for speed/availability (10-M group)
-BACKUP_MODEL = "gpt-4o-mini-2024-07-18"
 
 # --------------------- Files ---------------------------
 CSV_PATH = Path(os.getenv("CSV_FILE", "grants_to_combine/all_digitized_grants_20250809_202343.csv"))
@@ -64,8 +62,15 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY env var not set")
 
-    # Default request timeout to avoid long stalls
-    client = openai.OpenAI(api_key=api_key, timeout=20)
+    client = openai.OpenAI(api_key=api_key)
+
+    # Quick preflight: verify model accessibility fast, fail early if gated/unavailable
+    try:
+        _ = client.models.with_options(timeout=10).retrieve(MODEL)
+        print(f"[grants_geolocate_v3] Preflight OK: model {MODEL} accessible")
+    except Exception as e:
+        print(f"[grants_geolocate_v3] Preflight FAILED for model {MODEL}: {e}")
+        return 0, state
 
     # Ensure output dir
     OUTPUT_PATH.parent.mkdir(exist_ok=True)
@@ -99,7 +104,7 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
             print(f"[grants_geolocate_v3] Requesting row {current_index}…")
 
             try:
-                resp = client.chat.completions.create(
+                resp = client.chat.completions.with_options(timeout=30).create(
                     model=selected_model,
                     messages=[{"role": "user", "content": prompt}],
                 )
@@ -111,23 +116,8 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
                 tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
                 used_tokens_total += tokens_used
             except Exception as e:
-                # Retry once with backup model if available
-                try:
-                    if 'BACKUP_MODEL' in globals() and BACKUP_MODEL:
-                        resp = client.chat.completions.create(
-                            model=BACKUP_MODEL,
-                            messages=[{"role": "user", "content": prompt}],
-                        )
-                        answer = resp.choices[0].message.content.strip()
-                        answer = answer.replace("\n", " ").strip()
-                        latlon = answer
-                        tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
-                        used_tokens_total += tokens_used
-                    else:
-                        raise e
-                except Exception as e2:
-                    latlon = f"ERROR: {e2}"
-                    tokens_used = 0
+                latlon = f"ERROR: {e}"
+                tokens_used = 0
 
             writer.writerow({
                 "row_id": row.get(id_col, current_index),
