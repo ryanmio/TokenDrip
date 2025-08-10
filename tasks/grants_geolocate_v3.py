@@ -99,7 +99,6 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
             resp = client.chat.completions.create(
                 model=selected_model,
                 messages=[{"role": "user", "content": prompt}],
-                max_completion_tokens=200,
             )
 
             # Capture the model's response exactly as-is (expected DMS format)
