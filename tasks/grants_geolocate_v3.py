@@ -67,7 +67,7 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
 
     # Quick preflight: verify model accessibility fast, fail early if gated/unavailable
     try:
-        _ = client.models.with_options(timeout=10).retrieve(MODEL)
+        _ = client.models.retrieve(MODEL)
         print(f"[grants_geolocate_v3] Preflight OK: model {MODEL} accessible")
     except Exception as e:
         print(f"[grants_geolocate_v3] Preflight FAILED for model {MODEL}: {e}")
@@ -106,9 +106,10 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
             print(f"[grants_geolocate_v3] Requesting row {current_index}…")
 
             try:
-                resp = client.chat.completions.with_options(timeout=180).create(
+                resp = client.chat.completions.create(
                     model=selected_model,
                     messages=[{"role": "user", "content": prompt}],
+                    timeout=180,
                 )
 
                 answer = resp.choices[0].message.content.strip()
