@@ -17,8 +17,8 @@ import tiktoken
 
 # ----------------- TokenDrip contract -----------------
 MODEL = "gpt-5-2025-08-07"            # primary model (1-M group)
-# Optional: uncomment or change if you'd like a fallback when the 1-M bucket is empty
-# BACKUP_MODEL = "gpt-4o-mini-2024-07-18"  # 10-M group fallback
+# Fast fallback for speed/availability (10-M group)
+BACKUP_MODEL = "gpt-4o-mini-2024-07-18"
 
 # --------------------- Files ---------------------------
 CSV_PATH = Path(os.getenv("CSV_FILE", "grants_to_combine/all_digitized_grants_20250809_202343.csv"))
@@ -64,7 +64,8 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY env var not set")
 
-    client = openai.OpenAI(api_key=api_key)
+    # Default request timeout to avoid long stalls
+    client = openai.OpenAI(api_key=api_key, timeout=20)
 
     # Ensure output dir
     OUTPUT_PATH.parent.mkdir(exist_ok=True)
@@ -93,13 +94,14 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
             prompt = build_prompt(desc)
             
             # Progress heartbeat so logs move even if API is slow
+            import time
+            start_ts = time.time()
             print(f"[grants_geolocate_v3] Requesting row {current_index}…")
 
             try:
                 resp = client.chat.completions.create(
                     model=selected_model,
                     messages=[{"role": "user", "content": prompt}],
-                    timeout=60,
                 )
 
                 answer = resp.choices[0].message.content.strip()
@@ -109,8 +111,23 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
                 tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
                 used_tokens_total += tokens_used
             except Exception as e:
-                latlon = f"ERROR: {e}"
-                tokens_used = 0
+                # Retry once with backup model if available
+                try:
+                    if 'BACKUP_MODEL' in globals() and BACKUP_MODEL:
+                        resp = client.chat.completions.create(
+                            model=BACKUP_MODEL,
+                            messages=[{"role": "user", "content": prompt}],
+                        )
+                        answer = resp.choices[0].message.content.strip()
+                        answer = answer.replace("\n", " ").strip()
+                        latlon = answer
+                        tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
+                        used_tokens_total += tokens_used
+                    else:
+                        raise e
+                except Exception as e2:
+                    latlon = f"ERROR: {e2}"
+                    tokens_used = 0
 
             writer.writerow({
                 "row_id": row.get(id_col, current_index),
@@ -118,6 +135,9 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
                 "latlon": latlon,
                 "tokens_used": tokens_used,
             })
+
+            dur = time.time() - start_ts
+            print(f"[grants_geolocate_v3] Row {current_index} done in {dur:.1f}s, tokens {tokens_used}")
 
             row_idx = current_index + 1
 
