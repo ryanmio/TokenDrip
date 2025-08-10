@@ -91,18 +91,26 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
 
             desc = row.get(desc_col, "")
             prompt = build_prompt(desc)
+            
+            # Progress heartbeat so logs move even if API is slow
+            print(f"[grants_geolocate_v3] Requesting row {current_index}…")
 
-            resp = client.chat.completions.create(
-                model=selected_model,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            try:
+                resp = client.chat.completions.create(
+                    model=selected_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    timeout=60,
+                )
 
-            answer = resp.choices[0].message.content.strip()
-            answer = answer.replace("\n", " ").strip()
-            latlon = answer
+                answer = resp.choices[0].message.content.strip()
+                answer = answer.replace("\n", " ").strip()
+                latlon = answer
 
-            tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
-            used_tokens_total += tokens_used
+                tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
+                used_tokens_total += tokens_used
+            except Exception as e:
+                latlon = f"ERROR: {e}"
+                tokens_used = 0
 
             writer.writerow({
                 "row_id": row.get(id_col, current_index),
