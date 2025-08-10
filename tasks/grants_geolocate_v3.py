@@ -25,6 +25,7 @@ OUTPUT_PATH = Path(os.getenv("OUTPUT_FILE", f"output/results_{CSV_PATH.stem}_v3.
 ID_FIELD = "grant_id"  # if absent, first column
 DESC_FIELD = "raw_entry"        # if absent, second column
 STATE_FIELDS = ["row_id", "description", "latlon", "tokens_used"]
+ROW_LIMIT = int(os.getenv("ROW_LIMIT", "5"))  # Temporary cap for test runs
 
 # ------------------ Helper funcs -----------------------
 enc = tiktoken.encoding_for_model("gpt-5-2025-08-07")
@@ -90,6 +91,7 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
         desc_col = DESC_FIELD if DESC_FIELD in reader.fieldnames else reader.fieldnames[1]
 
         current_index = -1
+        processed_count = 0
         for row in reader:
             current_index += 1
             if current_index < row_idx:
@@ -104,7 +106,7 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
             print(f"[grants_geolocate_v3] Requesting row {current_index}…")
 
             try:
-                resp = client.chat.completions.with_options(timeout=30).create(
+                resp = client.chat.completions.with_options(timeout=180).create(
                     model=selected_model,
                     messages=[{"role": "user", "content": prompt}],
                 )
@@ -132,6 +134,10 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
             row_idx = current_index + 1
 
             if used_tokens_total >= budget:
+                break
+            processed_count += 1
+            if ROW_LIMIT and processed_count >= ROW_LIMIT:
+                print(f"[grants_geolocate_v3] Test cap reached ({ROW_LIMIT} rows). Stopping early.")
                 break
 
     state["next_row"] = row_idx
