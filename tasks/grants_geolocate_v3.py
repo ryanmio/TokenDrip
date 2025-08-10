@@ -75,13 +75,6 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
 
     with CSV_PATH.open() as f_in, OUTPUT_PATH.open("a", newline="") as f_out:
         reader = csv.DictReader(f_in)
-        # Fast-forward to current row
-        rows = list(reader)
-        n_rows = len(rows)
-        if row_idx >= n_rows:
-            print("[grants_geolocate_v3] All rows processed ✅")
-            return 0, state
-
         writer = csv.DictWriter(f_out, fieldnames=STATE_FIELDS)
         if first_write:
             writer.writeheader()
@@ -90,44 +83,40 @@ def run_chunk(budget: int, state: dict, selected_model: str | None = None):
         id_col = ID_FIELD if ID_FIELD in reader.fieldnames else reader.fieldnames[0]
         desc_col = DESC_FIELD if DESC_FIELD in reader.fieldnames else reader.fieldnames[1]
 
-        while row_idx < n_rows:
-            row = rows[row_idx]
-            desc = row.get(desc_col, "")
+        current_index = -1
+        for row in reader:
+            current_index += 1
+            if current_index < row_idx:
+                continue
 
+            desc = row.get(desc_col, "")
             prompt = build_prompt(desc)
-            
+
             resp = client.chat.completions.create(
                 model=selected_model,
                 messages=[{"role": "user", "content": prompt}],
             )
 
-            # Capture the model's response exactly as-is (expected DMS format)
             answer = resp.choices[0].message.content.strip()
-
-            # If the model accidentally prepends/ appends markdown fences or text, strip those
             answer = answer.replace("\n", " ").strip()
-
             latlon = answer
 
-            tokens_used = resp.usage.total_tokens
+            tokens_used = getattr(resp.usage, 'total_tokens', 0) if hasattr(resp, 'usage') else 0
             used_tokens_total += tokens_used
-            
+
             writer.writerow({
-                "row_id": row.get(id_col, row_idx),
+                "row_id": row.get(id_col, current_index),
                 "description": desc[:100],
                 "latlon": latlon,
                 "tokens_used": tokens_used,
             })
 
-            row_idx += 1
-            
-            # Only stop after we've actually exceeded the budget
+            row_idx = current_index + 1
+
             if used_tokens_total >= budget:
                 break
 
     state["next_row"] = row_idx
-    if row_idx >= n_rows:
-        print("[grants_geolocate_v3] All rows processed ✅")
     print(f"[grants_geolocate_v3] Processed up to row {row_idx-1}, used {used_tokens_total} tokens")
     return used_tokens_total, state 
 
