@@ -36,6 +36,7 @@ if TEST_MODE:
 # Model mappings to quota groups
 MODEL_GROUPS = {
     # 1M token group models
+        'gpt-5-2025-08-07': '1m_group',
     'gpt-4.5-preview-2025-02-27': '1m_group',
     'gpt-4.1-2025-04-14': '1m_group', 
     'gpt-4o-2024-05-13': '1m_group',
