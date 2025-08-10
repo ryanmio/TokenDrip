@@ -27,7 +27,7 @@ OUTPUT_PATH = Path(os.getenv("OUTPUT_FILE", f"output/results_{CSV_PATH.stem}_v3.
 ID_FIELD = "grant_id"  # if absent, first column
 DESC_FIELD = "raw_entry"        # if absent, second column
 STATE_FIELDS = ["row_id", "description", "latlon", "tokens_used"]
-ROW_LIMIT = int(os.getenv("ROW_LIMIT", "5"))  # Temporary cap for test runs
+ROW_LIMIT = int(os.getenv("ROW_LIMIT", "25"))  # Temporary cap for test runs
 CONCURRENCY = int(os.getenv("CONCURRENCY", "5"))
 
 # ------------------ Helper funcs -----------------------
